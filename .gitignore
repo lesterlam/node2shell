@@ -11,7 +11,7 @@ asan/harness-1.2.1
 asan/harness-1.2.1-debug
 asan/dump_tables
 payload/payloads/*.br
-out/
+out/*
 !out/ab-cmd-drain.txt
 *.o
 tmp/
