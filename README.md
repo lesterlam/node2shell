@@ -7,8 +7,10 @@ Everything here was built from primary sources: the CVE records, the vendor advi
 upstream fix commit, and Brotli 1.2.0 / 1.2.1 compiled from the official tarballs. No
 third-party exploit code was used or copied.
 
-**Full report: [docs/REPORT.md](docs/REPORT.md)** · working log: [docs/NOTES.md](docs/NOTES.md) ·
-visual walkthrough: open **[`viz/node2shell.html`](viz/node2shell.html)** (single file, no deps).
+**Full report: [docs/REPORT.md](docs/REPORT.md)** · working log: [docs/NOTES.md](docs/NOTES.md)
+
+**Interactive walkthrough → https://lesterlam.github.io/node2shell/** — single file, no
+dependencies, works offline too: [`index.html`](index.html).
 
 ## Result
 
@@ -44,7 +46,7 @@ are not committed because the generator is deterministic.
 |---|---|
 | `docs/REPORT.md` | review-grade report: root cause, trigger, measurements, exploitability, remediation |
 | `docs/NOTES.md` | working log, including the dead ends (state resets, phase-locked counters, the `mlr < 0` guard, register-cached index) |
-| `viz/node2shell.html` | interactive walkthrough: trigger animation, state offset map, A/B transcript, timeline |
+| `index.html` | interactive walkthrough (also the GitHub Pages site root): trigger animation, state offset map, A/B transcript, timeline |
 | `payload/gen_payload.py` | Brotli bitstream generator (`cmd-drain`, `lit-flood`, `lab-trigger`, …) |
 | `asan/harness.c` | instrumented decoder driver: state introspection, `offsetof` map, `BROTLI_DEBUG` build, spin watchdog, clobber dump |
 | `asan/dump_tables.c` | reads the *compiled* transform + dictionary tables out of the library |
