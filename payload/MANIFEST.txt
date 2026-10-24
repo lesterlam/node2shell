@@ -1,0 +1,21 @@
+# payload digests — sha256, size in bytes, name
+# regenerate: cd payload/payloads && sha256sum *.br
+65ae373368511888033729b3d17e8d9570bf5b84503856a24c8978ae17e592d7          12  all-switch.br
+cfe826d55227cb167af2e6ed72525ffd31d16ede46c5bd49e0faf67ea6f3eb61    23068706  cmd-drain-poke.br
+15273d4e8ef176b7f9e0a6e706784f095fdc653edc0c675ef329f3978b8261d8    23068706  cmd-drain-t24.br
+b03afe3ec49d1f774ce0824314843d6be549074575b8f6d5b88ab2bb2c28c9f0    23068690  cmd-drain-t8.br
+53fee05aedfeccca2e096b6cc9fc756ee613955fe88dd5039869e270e6f81bb9          17  cmd-switch.br
+6cb0150695dfe3a097e7900d026af660ebd3a82e15831973ce7ae1c967cd8726          29  control-valid.br
+7f30f662547275ec72e2604cd9bf6ca2149f05c7c2e4bf8a0763bb87dfb2f349         106  dbg.br
+66e97d03b86835b21966d5950a11193e6889c31227414a2fce29a673446e848e          24  dist-switch.br
+b803da4c177606878bbbb6a255f85cb7ff65d49aa1ef5a8f7f7ed9f16ac475d7          21  lab-trigger.br
+6caa535e627c45a4befdaac5e45eea0d830fcb4a6ea0b7c3eedff3243bf4117a          30  lit-flood-t16.br
+9e490ae818754ba6504c80ba7511c05823ac242f5e7f0febf49a182ceef6b899         270  lit-flood-t256.br
+7767f9038571246e9d191d55f52ff397469454c7fe218f7feb9c6dd32f2f7458          78  lit-flood-t64.br
+b89a35dafa8b0976c4030f8e7f60d7ab7bcc64c23bd392c21cf6447913f91422          22  lit-flood-t8.br
+f54361c7ccd994d381ec2d83e66c3a396a15904ba39b1497df5e921de5a4aa78          13  lit-flood.br
+023088ab90711d5f41a578978374d67c6d77aab324546a9b1e66b4d7a4e14667          89  nt-t64.br
+a1de30c2536e6a6bc1096004d98a047f65efd993912f8367a0277bf2119a27a7          89  ntover-t64.br
+ea3cd84fd0d39b84697d92dbd209aba201e8f75f98d64c7539706e7b1bfbaf1b          14  over-t0.br
+66412703e6086eb6c1772d132972e8bdafdd23ad7f77de0ce6067855dfeab530          19  trigger-postfix.br
+b1bee2b28e46488713ce4c9c21ca6d2c9a9df531edcd17f63d184c52149fa34e          19  trigger.br

